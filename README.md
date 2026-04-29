@@ -1,78 +1,93 @@
 # Dhruvi's Gym Plan 💪✨
 
-Personal fitness PWA — React + Vite frontend, IndexedDB storage, Gemini-powered SmartTips via Netlify Functions.
+Personal fitness PWA — React + Vite, IndexedDB + GitHub sync, Gemini SmartTips.
 
-## Quick Start
+## Quick Start (local, no sync)
 
 ```bash
 npm install
-npm run dev        # requires netlify CLI: npm i -g netlify-cli
-```
-
-Or just Vite (no SmartTips locally):
-```bash
 npx vite
 ```
 
-## Deploy to Netlify via GitHub
+## Deploy to Netlify
 
-### Step 1: Push to GitHub
+### 1. Push to GitHub
+
 ```bash
 git init
 git add .
-git commit -m "Dhruvi's Gym Plan v2"
+git commit -m "Dhruvi's Gym Plan"
 git remote add origin https://github.com/YOUR_USER/dhruvi-gym.git
 git push -u origin main
 ```
 
-### Step 2: Connect to Netlify
-1. Go to [app.netlify.com](https://app.netlify.com)
-2. Click **"Add new site" → "Import an existing project"**
-3. Select your GitHub repo
-4. Netlify auto-detects `netlify.toml` — build command and publish dir are pre-configured
-5. Click **Deploy**
+### 2. Get API Keys
 
-### Step 3: Add Gemini API Key (CRITICAL for SmartTips)
-1. Get an API key from [Google AI Studio](https://aistudio.google.com/apikey)
-2. In Netlify dashboard: **Site settings → Environment variables**
-3. Click **"Add a variable"**
-4. Key: `GEMINI_API_KEY`
-5. Value: your API key (e.g. `AIzaSy...`)
-6. Click **Save**
-7. **Redeploy** the site (Deploys → Trigger deploy → Deploy site)
+**Gemini** (SmartTips): [aistudio.google.com/apikey](https://aistudio.google.com/apikey) → Create key
 
-> Without this env var, SmartTips will show nothing — the rest of the app works fine.
+**GitHub** (cross-device sync): [github.com/settings/tokens](https://github.com/settings/tokens?type=beta) → Generate new token (Fine-grained)
+- Select **Only select repositories** → pick your dhruvi-gym repo
+- Under **Permissions → Repository permissions** → set **Contents** to **Read and write**
+- Generate → copy the token
 
-### Step 4 (optional): Local development with SmartTips
-Create a `.env` file in project root (it's gitignored):
+### 3. Deploy on Netlify
+
+1. [app.netlify.com](https://app.netlify.com) → **Add new site** → **Import from Git**
+2. Select your repo — Netlify reads `netlify.toml` automatically
+3. **Site configuration → Environment variables** → add these:
+
+| Key | Value | What it does |
+|-----|-------|--------------|
+| `GEMINI_API_KEY` | `AIza...` | SmartTips AI (server-side only) |
+| `GITHUB_TOKEN` | `github_pat_...` | Sync data across devices (server-side only) |
+| `GITHUB_REPO` | `youruser/dhruvi-gym` | Which repo to store data in |
+
+4. Deploy!
+
+> All 3 keys stay server-side in Netlify Functions — never sent to the browser.
+
+### 4. Local dev with full features
+
+Create `.env` in project root (gitignored):
 ```
-GEMINI_API_KEY=your_key_here
+GEMINI_API_KEY=AIza...
+GITHUB_TOKEN=github_pat_...
+GITHUB_REPO=youruser/dhruvi-gym
 ```
-Then run `netlify dev` (requires `npm i -g netlify-cli`).
+```bash
+npm i -g netlify-cli
+netlify dev
+```
+
+## How Cross-Device Sync Works
+
+Your gym data is stored as a single JSON file (`data/gym-data.json`) in your GitHub repo. The app auto-syncs:
+
+1. **On app load** → pulls from GitHub, merges with local data, pushes back
+2. **After saving a log** → pushes updated data to GitHub
+3. **🔄 button in top bar** → manual sync anytime
+
+Open the app on your phone, log a workout. Open on your laptop later — data is there. No accounts, no databases, just a JSON file in your own repo.
+
+The backup/import feature (password: `gymgoingdhubu`) still works as a safety net before deploying new versions.
 
 ## Architecture
 
-| Layer | Tech | Notes |
-|-------|------|-------|
-| Frontend | React 18 + Vite | SPA with client-side routing |
-| Storage | IndexedDB (Dexie) | All data lives in your browser |
-| SmartTips | Netlify Function → Gemini 2.5 Flash Lite | Serverless, API key stays hidden |
-| Styling | CSS custom properties | Auto dark/light by time of day |
-| PWA | Service worker + manifest | Installable on mobile |
+```
+Browser (any device)
+  ├── React SPA
+  ├── IndexedDB (instant local)
+  └── Netlify Function → GitHub API → data/gym-data.json
+                       → Gemini API → SmartTips
+```
 
-## Features
-- **Log Page:** Calendar, 7-day streak, structured nutrition/cardio/exercise inputs, mood, backup/import (password: `gymgoingdhubu`)
-- **Gym Page:** Push/Pull/Legs at 3-day and 5-day tiers, beginner-friendly exercises, Gemini SmartTips (refresh button), YouTube form videos
-- **Analytics:** Nutrition charts, exercise progression with PR/DROP badges, cardio tracking — each exercise's data is fully independent
-- **Meals:** 7-day 1,450-cal vegetarian plan with macro breakdowns
-- **Theme:** Auto dark mode 5pm-7am, light mode 7am-5pm
-- **Desktop:** Top tabs, full-width layout. Mobile: bottom nav
+## SmartTips
 
-## SmartTip Triggers
-Tips refresh from Gemini on:
-1. First website visit (app load)
-2. After saving a log entry
-3. Manual refresh button (🔄) on the Gym page
+Each exercise gets its own Gemini prompt:
+- **Has history:** sends that exercise's sessions → specific weight/sets/reps for next session
+- **No history:** sends all other exercises to gauge overall level → starting recommendation
+
+Tips refresh on: app load, after saving a log, 🔄 on Gym page.
 
 ---
 *Built with love for Dhruvi 💕*

@@ -1,5 +1,6 @@
 // Netlify Function: Gemini SmartTip generator
-// Receives exercise data, returns personalized tips via Gemini 2.5 Flash Lite
+// Enhanced: sends exercise-specific history for tips on weight/sets/reps
+// If no history: sends other exercises to gauge overall fitness level
 
 export default async (request) => {
   if (request.method !== 'POST') {
@@ -12,8 +13,9 @@ export default async (request) => {
   }
 
   try {
-    const { exercises } = await request.json();
-    // exercises = [{ name, latest: { detail, date }, history: [{ detail, date }] }]
+    const { exercises, allExerciseSummary } = await request.json();
+    // exercises = [{ name, history: [{ date, detail }] }]  — one per exercise on the gym page
+    // allExerciseSummary = [{ name, sessionCount, lastDetail, lastDate }] — overview of all logged exercises
 
     if (!exercises || exercises.length === 0) {
       return new Response(JSON.stringify({ tips: [] }), {
@@ -21,36 +23,58 @@ export default async (request) => {
       });
     }
 
-    // Build the prompt — each exercise is independent
+    // Build per-exercise blocks
     let exerciseBlocks = exercises.map((ex, i) => {
-      const historyLines = (ex.history || [])
-        .slice(-8) // last 8 sessions max
-        .map(h => `    ${h.date}: ${h.detail}`)
-        .join('\n');
+      const hasHistory = ex.history && ex.history.length > 0;
 
-      return `${i + 1}. ${ex.name}
-   Latest session (${ex.latest.date}): ${ex.latest.detail}
-   Previous sessions:
-${historyLines || '    (none — first session)'}`;
+      if (hasHistory) {
+        // Send this exercise's own history (last 10 sessions)
+        const sessions = ex.history.slice(-10);
+        const latest = sessions[sessions.length - 1];
+        const older = sessions.slice(0, -1);
+
+        const historyLines = older.map(h => `    ${h.date}: ${h.detail}`).join('\n');
+
+        return `${i + 1}. ${ex.name} [HAS HISTORY]
+   Latest session (${latest.date}): ${latest.detail}
+   Previous sessions (oldest first):
+${historyLines || '    (only one session so far)'}
+
+   → Analyze her progression for THIS exercise only. Recommend specific weight (kg), sets, and reps for her NEXT session. If she's ready to increase weight, say by how much. If she should stay, explain why.`;
+
+      } else {
+        // No history — send context about her other exercises so Gemini can gauge her level
+        const contextBlock = (allExerciseSummary && allExerciseSummary.length > 0)
+          ? `   Her other exercise data (to gauge her fitness level):
+${allExerciseSummary.map(s => `    - ${s.name}: ${s.sessionCount} sessions, last did "${s.lastDetail}" on ${s.lastDate}`).join('\n')}`
+          : `   She has no gym history at all — complete beginner.`;
+
+        return `${i + 1}. ${ex.name} [NO HISTORY — FIRST TIME]
+${contextBlock}
+
+   → Based on her overall level (or lack thereof), recommend a starting weight (kg), sets, and reps for this exercise. Be very specific. If it's a bodyweight exercise, just recommend sets and reps.`;
+      }
     }).join('\n\n');
 
-    const prompt = `You are a warm, supportive fitness coach for Dhruvi, a beginner girl who just started going to the gym. She knows very little about fitness and needs encouragement.
+    const prompt = `You are a warm, supportive gym coach for Dhruvi, a beginner girl who recently started going to the gym. She's vegetarian, focused on building strength and losing weight at 1450 calories/day. She needs encouragement but also SPECIFIC, ACTIONABLE advice.
 
-Generate a short SmartTip (1-2 sentences) for EACH exercise below. Each tip must be based ONLY on that exercise's own data — never reference other exercises.
+Generate a SmartTip for EACH exercise below. Each tip MUST include:
+- Specific recommendation: exact weight in kg (or "bodyweight"), exact sets × reps for next session
+- Brief reasoning based on her data (or lack of it)
+- Warm encouragement — use her name "Dhruvi" occasionally, add an emoji
 
-Guidelines for tips:
-- If it's her first session: Welcome her warmly, suggest focusing on form
-- If she improved (more reps or weight): Celebrate the progress enthusiastically  
-- If volume dropped: Be gentle, remind her rest days matter
-- If she's been at the same weight 3+ sessions: Suggest a small increase
-- If there was a big weight jump: Caution about form
-- Always be specific (mention actual weights/reps from her data)
-- Use her name "Dhruvi" occasionally
-- Add an emoji or two naturally
-- Keep each tip under 40 words
+Rules:
+- Each exercise's tip must be based ONLY on that exercise's own history (never mix data between exercises)
+- For exercises with [NO HISTORY], use the other exercise summary to gauge if she's a total beginner or has some gym experience, then recommend accordingly
+- Keep each tip 2-3 sentences, under 50 words
+- Be specific with numbers — "try 3×10 at 4kg" not "increase slightly"
+- If she's been consistent at a weight and hitting 12+ reps, suggest a specific increase
+- If volume dropped, suggest staying at current weight and focusing on form
 
 Respond with ONLY a valid JSON array, no markdown, no backticks:
-[{"exercise":"exact exercise name","tip":"your tip here"}]
+[{"exercise":"exact exercise name","tip":"your tip here","nextRx":"3×12 @ 5kg"}]
+
+The "nextRx" field is a short prescription like "3×12 @ 5kg" or "3×15 bodyweight" for quick reference.
 
 Exercises:
 
@@ -64,7 +88,7 @@ ${exerciseBlocks}`;
         body: JSON.stringify({
           contents: [{ parts: [{ text: prompt }] }],
           generationConfig: {
-            maxOutputTokens: 1024,
+            maxOutputTokens: 2048,
             temperature: 0.7
           }
         })
@@ -81,11 +105,7 @@ ${exerciseBlocks}`;
     }
 
     const geminiData = await geminiRes.json();
-
-    // Extract text from Gemini response
     const rawText = geminiData?.candidates?.[0]?.content?.parts?.[0]?.text || '[]';
-
-    // Clean potential markdown fences
     const cleaned = rawText.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
 
     let tips;
