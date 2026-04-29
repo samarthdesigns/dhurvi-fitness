@@ -1,0 +1,23 @@
+[build]
+  command = "npm run build"
+  publish = "dist"
+  functions = "netlify/functions"
+
+[dev]
+  command = "npx vite"
+  port = 5173
+  targetPort = 5173
+  autoLaunch = false
+
+# API calls -> Netlify Functions (must be BEFORE the catch-all)
+[[redirects]]
+  from = "/api/smarttip"
+  to = "/.netlify/functions/smarttip"
+  status = 200
+  force = true
+
+# SPA fallback
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

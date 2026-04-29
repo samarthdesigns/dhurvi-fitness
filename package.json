@@ -1,29 +1,23 @@
 {
   "name": "dhruvis-gym-plan",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "concurrently \"node server.js\" \"vite\"",
+    "dev": "netlify dev",
     "build": "vite build",
-    "start": "node server.js",
     "preview": "vite preview"
   },
   "dependencies": {
-    "better-sqlite3": "^11.0.0",
-    "cors": "^2.8.5",
-    "express": "^4.18.2",
-    "multer": "^1.4.5-lts.1",
-    "recharts": "^2.12.0",
+    "dexie": "^4.0.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-router-dom": "^6.22.0",
-    "framer-motion": "^11.0.0",
+    "recharts": "^2.12.0",
     "lucide-react": "^0.344.0"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.2.1",
-    "concurrently": "^8.2.2",
     "vite": "^5.1.0"
   }
 }
